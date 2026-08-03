@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mi3dapp",
   "pages_build_output_dir": "dist",
+  "functions_dir": "functions",
   "compatibility_flags": [
     "nodejs_compat"
   ]
