@@ -91,7 +91,7 @@ export const onRequest = async (context) => {
       contents.push(`Genera el modelo 3D según esta instrucción: "${finalPrompt}"`);
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents,
         config: { systemInstruction, responseMimeType: "application/json" },
       });
@@ -116,7 +116,7 @@ export const onRequest = async (context) => {
 
       const systemInstruction = `You are Forge AI, an expert 3D modeling editor. Modify parameters accordingly. Params: ${JSON.stringify(currentModel)}`;
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: `Edit model parameters with instruction: "${editInstruction}"`,
         config: { systemInstruction, responseMimeType: "application/json" },
       });
@@ -131,7 +131,7 @@ export const onRequest = async (context) => {
         return new Response(JSON.stringify({ reply: "Asistente listo." }), { status: 200, headers: jsonHeaders });
       }
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: finalPrompt,
         config: { systemInstruction: "Eres Forge AI, un asistente técnico para impresoras 3D. Responde conciso en español." },
       });
@@ -156,7 +156,7 @@ export const onRequest = async (context) => {
 
     const systemInstructionFallback = `You are Forge AI. Output strictly valid JSON matching schema: { "modelName": string, "dimensions": { "x": number, "y": number, "z": number }, "wallThickness": number, "infill": number, "recommendedMaterial": string, "printTime": string, "layerHeight": number, "shapeType": string, "summary": string, "technicalNotes": string }`;
     const responseFallback = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Genera el modelo 3D: "${finalPrompt}"`,
       config: { systemInstruction: systemInstructionFallback, responseMimeType: "application/json" },
     });
