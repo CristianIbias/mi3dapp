@@ -36,7 +36,7 @@ export const onRequest = async (context) => {
     let rawText = "";
     const contentType = context.request.headers.get("content-type") || "";
 
-    // Extractor multiformato garantizado
+    // Extractor multiformato resistente a fallos
     if (contentType.includes("form-data") || contentType.includes("multipart")) {
       try {
         const formData = await context.request.formData();
@@ -61,12 +61,11 @@ export const onRequest = async (context) => {
     const mimeType = body.mimeType || "image/jpeg";
     const finalPrompt = prompt || "engranaje mecanico basico";
 
-    // ========================================================
-    // ENRUTADOR INTELIGENTE POR PALABRA CLAVE (INDISTRUIBLE)
-    // ========================================================
     const pathLower = url.pathname.toLowerCase();
 
+    // ========================================================
     // 1. SI BUSCA MODELAR (PROMPT)
+    // ========================================================
     if (pathLower.includes("prompt")) {
       if (!ai) {
         return new Response(JSON.stringify({
@@ -92,14 +91,16 @@ export const onRequest = async (context) => {
       contents.push(`Genera el modelo 3D según esta instrucción: "${finalPrompt}"`);
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents,
         config: { systemInstruction, responseMimeType: "application/json" },
       });
       return new Response(response.text || "{}", { status: 200, headers: jsonHeaders });
     }
 
+    // ========================================================
     // 2. SI BUSCA EDITAR PIEZA (EDIT)
+    // ========================================================
     if (pathLower.includes("edit")) {
       const editInstruction = body.editInstruction || finalPrompt;
       const currentModel = body.currentModel || {};
@@ -115,27 +116,29 @@ export const onRequest = async (context) => {
 
       const systemInstruction = `You are Forge AI, an expert 3D modeling editor. Modify parameters accordingly. Params: ${JSON.stringify(currentModel)}`;
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: `Edit model parameters with instruction: "${editInstruction}"`,
         config: { systemInstruction, responseMimeType: "application/json" },
       });
       return new Response(response.text || "{}", { status: 200, headers: jsonHeaders });
     }
 
+    // ========================================================
     // 3. SI BUSCA CONVERSAR (CHAT)
+    // ========================================================
     if (pathLower.includes("chat")) {
       if (!ai) {
         return new Response(JSON.stringify({ reply: "Asistente listo." }), { status: 200, headers: jsonHeaders });
       }
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: finalPrompt,
         config: { systemInstruction: "Eres Forge AI, un asistente técnico para impresoras 3D. Responde conciso en español." },
       });
       return new Response(JSON.stringify({ reply: response.text }), { status: 200, headers: jsonHeaders });
     }
 
-    // RESPUESTA COMODÍN (Si la ruta sigue sin coincidir, procesa el prompt aquí para que NUNCA dé error 404)
+    // RESPUESTA COMODÍN GLOBAL DE RESPALDO
     if (!ai) {
       return new Response(JSON.stringify({
         modelName: finalPrompt,
@@ -153,7 +156,7 @@ export const onRequest = async (context) => {
 
     const systemInstructionFallback = `You are Forge AI. Output strictly valid JSON matching schema: { "modelName": string, "dimensions": { "x": number, "y": number, "z": number }, "wallThickness": number, "infill": number, "recommendedMaterial": string, "printTime": string, "layerHeight": number, "shapeType": string, "summary": string, "technicalNotes": string }`;
     const responseFallback = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: `Genera el modelo 3D: "${finalPrompt}"`,
       config: { systemInstruction: systemInstructionFallback, responseMimeType: "application/json" },
     });
