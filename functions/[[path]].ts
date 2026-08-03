@@ -32,13 +32,21 @@ export const onRequest = async (context) => {
   }
 
   try {
-    // PROTECCIÓN EXTRA: Validar si el cuerpo del mensaje viene vacío para que no rompa la app
-    const textData = await context.request.text();
-    if (!textData) {
-      return new Response(JSON.stringify({ error: "El cuerpo de la petición está vacío" }), { status: 400, headers: jsonHeaders });
-    }
+    // MÉTODO DEFINITIVO: Clonamos la petición para leer el JSON sin importar cómo lo envíe v0
+    const clonedRequest = context.request.clone();
+    let body = {};
     
-    const body = JSON.parse(textData);
+    try {
+      body = await clonedRequest.json();
+    } catch (jsonError) {
+      // Si falla el JSON directo, intentamos extraer los parámetros del texto de respaldo
+      const fallbackText = await context.request.text();
+      if (fallbackText) {
+        body = JSON.parse(fallbackText);
+      } else {
+        return new Response(JSON.stringify({ error: "No se pudieron procesar los datos del comando" }), { status: 400, headers: jsonHeaders });
+      }
+    }
 
     // ==========================================
     // RUTA 1: CREAR PIEZA 3D (/api/forge/prompt)
@@ -133,4 +141,3 @@ export const onRequest = async (context) => {
     return new Response(JSON.stringify({ error: error.message || "Failed to process request" }), { status: 500, headers: jsonHeaders });
   }
 };
-
