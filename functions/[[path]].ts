@@ -1,6 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Cabeceras universales para evitar que el navegador bloquee la página
 const jsonHeaders = {
   "Content-Type": "application/json;charset=UTF-8",
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +20,6 @@ export const onRequest = async (context) => {
   const apiKey = context.env.GEMINI_API_KEY;
   const ai = getGeminiClient(apiKey);
 
-  // Evitar bloqueos si el navegador hace una consulta de verificación previa (OPTIONS)
   if (context.request.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -34,7 +32,13 @@ export const onRequest = async (context) => {
   }
 
   try {
-    const body = await context.request.json();
+    // PROTECCIÓN EXTRA: Validar si el cuerpo del mensaje viene vacío para que no rompa la app
+    const textData = await context.request.text();
+    if (!textData) {
+      return new Response(JSON.stringify({ error: "El cuerpo de la petición está vacío" }), { status: 400, headers: jsonHeaders });
+    }
+    
+    const body = JSON.parse(textData);
 
     // ==========================================
     // RUTA 1: CREAR PIEZA 3D (/api/forge/prompt)
@@ -129,3 +133,4 @@ export const onRequest = async (context) => {
     return new Response(JSON.stringify({ error: error.message || "Failed to process request" }), { status: 500, headers: jsonHeaders });
   }
 };
+
