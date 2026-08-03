@@ -117,3 +117,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ error: error.message || "Failed to process request" }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 };
+
