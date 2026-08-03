@@ -1,0 +1,6 @@
+{
+  "name": "Forge AI - 3D Printing Assistant",
+  "description": "Futuristic AI dashboard, 3D visualizer, printer telemetry, AMS filament manager, and geometric editor for 3D printing.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
