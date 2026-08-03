@@ -1,11 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 
-interface Env {
-  GEMINI_API_KEY: string;
-}
+// Cabeceras universales para evitar que el navegador bloquee la página
+const jsonHeaders = {
+  "Content-Type": "application/json;charset=UTF-8",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
-// Función auxiliar para inicializar Gemini de forma segura en Cloudflare
-function getGeminiClient(apiKey: string | undefined) {
+function getGeminiClient(apiKey) {
   if (!apiKey) return null;
   return new GoogleGenAI({
     apiKey,
@@ -13,26 +16,36 @@ function getGeminiClient(apiKey: string | undefined) {
   });
 }
 
-// ENRUTADOR PRINCIPAL DE CLOUDFLARE PAGES
-export const onRequestPost: PagesFunction<Env> = async (context) => {
+export const onRequest = async (context) => {
   const url = new URL(context.request.url);
   const apiKey = context.env.GEMINI_API_KEY;
   const ai = getGeminiClient(apiKey);
 
+  // Evitar bloqueos si el navegador hace una consulta de verificación previa (OPTIONS)
+  if (context.request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }
+
   try {
-    const body: any = await context.request.json();
+    const body = await context.request.json();
 
     // ==========================================
     // RUTA 1: CREAR PIEZA 3D (/api/forge/prompt)
     // ==========================================
-    if (url.pathname === "/api/forge/prompt") {
+    if (url.pathname === "/api/forge/prompt" || url.pathname.endsWith("/api/forge/prompt")) {
       const { prompt, imageBase64, mimeType } = body;
       if (!prompt && !imageBase64) {
-        return new Response(JSON.stringify({ error: "Prompt or Image is required" }), { status: 400 });
+        return new Response(JSON.stringify({ error: "Prompt or Image is required" }), { status: 400, headers: jsonHeaders });
       }
 
       if (!ai) {
-        // Respuesta de respaldo si no configuraste la API Key todavía
         const fallbackPrompt = prompt || "Objeto detectado en imagen";
         return new Response(JSON.stringify({
           modelName: imageBase64 ? `Modelo 3D de Foto (${fallbackPrompt})` : fallbackPrompt,
@@ -43,19 +56,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           printTime: "01:38:00",
           layerHeight: 0.2,
           shapeType: fallbackPrompt.toLowerCase().includes("gear") || fallbackPrompt.toLowerCase().includes("engranaje") ? "gear" : fallbackPrompt.toLowerCase().includes("vase") || fallbackPrompt.toLowerCase().includes("maceta") || fallbackPrompt.toLowerCase().includes("florero") ? "vase" : fallbackPrompt.toLowerCase().includes("drone") || fallbackPrompt.toLowerCase().includes("chasis") ? "drone" : fallbackPrompt.toLowerCase().includes("cable") || fallbackPrompt.toLowerCase().includes("soporte") ? "bracket" : "torus",
-          summary: imageBase64 ? `Modelo 3D reconstruido automáticamente a partir de la imagen adjunta. Geometría optimizada para slicer.` : `Modelo '${fallbackPrompt}' inicializado con telemetría de slicer optimizada.`,
-          technicalNotes: "Orientación de impresión óptima detectada. Ventiladores de capa al 100% desde capa 3."
-        }), { headers: { "Content-Type": "application/json" } });
+          summary: imageBase64 ? `Modelo 3D reconstruido automáticamente.` : `Modelo '${fallbackPrompt}' inicializado.`,
+          technicalNotes: "Optimizado para impresión rápida."
+        }), { status: 200, headers: jsonHeaders });
       }
 
-      const systemInstruction = `You are Forge AI, an expert 3D modeling and additive manufacturing assistant capable of image-to-3D reconstruction analysis. Generate an accurate 3D model specification for 3D printing. Output strictly valid JSON matching this schema: { "modelName": string, "dimensions": { "x": number, "y": number, "z": number }, "wallThickness": number, "infill": number, "recommendedMaterial": string, "printTime": string, "layerHeight": number, "shapeType": string, "summary": string, "technicalNotes": string }`;
+      const systemInstruction = `You are Forge AI, an expert 3D modeling assistant. Output strictly valid JSON matching this schema: { "modelName": string, "dimensions": { "x": number, "y": number, "z": number }, "wallThickness": number, "infill": number, "recommendedMaterial": string, "printTime": string, "layerHeight": number, "shapeType": string, "summary": string, "technicalNotes": string } Do not wrap in markdown backticks. Output raw JSON.`;
 
-      const contents: any[] = [];
+      const contents = [];
       if (imageBase64) {
         const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
         contents.push({ inlineData: { mimeType: mimeType || "image/jpeg", data: cleanBase64 } });
       }
-      contents.push(prompt ? `Reconstruye o genera el modelo 3D según esta instrucción y/o imagen: "${prompt}"` : "Analiza la imagen adjunta y genera el modelo 3D optimizado para impresión 3D.");
+      contents.push(prompt ? `Genera el modelo 3D: "${prompt}"` : "Genera el modelo 3D de la imagen.");
 
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
@@ -63,13 +76,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         config: { systemInstruction, responseMimeType: "application/json" },
       });
 
-      return new Response(response.text || "{}", { headers: { "Content-Type": "application/json" } });
+      return new Response(response.text || "{}", { status: 200, headers: jsonHeaders });
     }
 
     // ==========================================
-    // RUTA 2: EDITAR PIEZA 3D (/api/forge/edit)
+    // RUTA 2: EDITAR PARAMETROS PIEZA (/api/forge/edit)
     // ==========================================
-    if (url.pathname === "/api/forge/edit") {
+    if (url.pathname === "/api/forge/edit" || url.pathname.endsWith("/api/forge/edit")) {
       const { editInstruction, currentModel } = body;
 
       if (!ai) {
@@ -78,10 +91,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           wallThickness: (currentModel?.wallThickness || 2.0) + 2.0,
           summary: `Aplicado: "${editInstruction}". Grosor de pared actualizado.`,
           technicalNotes: "Geometría recalculada con tolerancia de contracción."
-        }), { headers: { "Content-Type": "application/json" } });
+        }), { status: 200, headers: jsonHeaders });
       }
 
-      const systemInstruction = `You are Forge AI, an expert 3D modeling editor. Modify the model parameters accordingly and return updated JSON with same schema. Params: ${JSON.stringify(currentModel || {})}`;
+      const systemInstruction = `You are Forge AI, an expert 3D modeling editor. Modify the model parameters accordingly and return updated JSON with same schema. Params actuales: ${JSON.stringify(currentModel || {})}`;
 
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
@@ -89,31 +102,30 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         config: { systemInstruction, responseMimeType: "application/json" },
       });
 
-      return new Response(response.text || "{}", { headers: { "Content-Type": "application/json" } });
+      return new Response(response.text || "{}", { status: 200, headers: jsonHeaders });
     }
 
     // ==========================================
-    // RUTA 3: ASISTENTE CHAT (/api/forge/chat)
+    // RUTA 3: CHAT ASISTENTE (/api/forge/chat)
     // ==========================================
-    if (url.pathname === "/api/forge/chat") {
+    if (url.pathname === "/api/forge/chat" || url.pathname.endsWith("/api/forge/chat")) {
       const { message } = body;
-
       if (!ai) {
-        return new Response(JSON.stringify({ reply: "Servicio AI local listo. Temperatura de extrusor y nivelación de cama normales." }), { headers: { "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ reply: "Motor local listo. Escribe tu comando." }), { status: 200, headers: jsonHeaders });
       }
 
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: message,
-        config: { systemInstruction: "Eres Forge AI, un asistente técnico para impresoras 3D (Bambu Lab, Voron, Ender, Creality) y preparación de archivos G-Code. Responde de forma concisa, profesional y útil en español." },
+        config: { systemInstruction: "Eres Forge AI, un asistente técnico para impresoras 3D. Responde de forma concisa en español." },
       });
 
-      return new Response(JSON.stringify({ reply: response.text }), { headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ reply: response.text }), { status: 200, headers: jsonHeaders });
     }
 
-    return new Response(JSON.stringify({ error: "Ruta no encontrada" }), { status: 404 });
+    return new Response(JSON.stringify({ error: "Ruta no encontrada" }), { status: 404, headers: jsonHeaders });
 
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message || "Failed to process request" }), { status: 500, headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message || "Failed to process request" }), { status: 500, headers: jsonHeaders });
   }
 };
