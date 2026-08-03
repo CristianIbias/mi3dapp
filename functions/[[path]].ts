@@ -32,27 +32,44 @@ export const onRequest = async (context) => {
   }
 
   try {
-    // MÉTODO DEFINITIVO: Clonamos la petición para leer el JSON sin importar cómo lo envíe v0
-    const clonedRequest = context.request.clone();
-    let body = {};
+    // MÉTODO INDESTRUCTIBLE: Leer los datos directamente por bytes del stream
+    let rawText = "";
+    const reader = context.request.body ? context.request.body.getReader() : null;
     
-    try {
-      body = await clonedRequest.json();
-    } catch (jsonError) {
-      // Si falla el JSON directo, intentamos extraer los parámetros del texto de respaldo
-      const fallbackText = await context.request.text();
-      if (fallbackText) {
-        body = JSON.parse(fallbackText);
-      } else {
-        return new Response(JSON.stringify({ error: "No se pudieron procesar los datos del comando" }), { status: 400, headers: jsonHeaders });
+    if (reader) {
+      const decoder = new TextDecoder();
+      let done = false;
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          rawText += decoder.decode(value, { stream: !done });
+        }
       }
+    } else {
+      rawText = await context.request.text();
+    }
+
+    if (!rawText || rawText.trim() === "") {
+      return new Response(JSON.stringify({ error: "El comando llegó completamente vacío al servidor" }), { status: 400, headers: jsonHeaders });
+    }
+
+    // Convertir el texto capturado a un objeto JSON real
+    let body = {};
+    try {
+      body = JSON.parse(rawText);
+    } catch (e) {
+      // Si el frontend envía texto suelto en lugar de JSON, lo convertimos a prompt automáticamente
+      body = { prompt: rawText };
     }
 
     // ==========================================
     // RUTA 1: CREAR PIEZA 3D (/api/forge/prompt)
     // ==========================================
     if (url.pathname === "/api/forge/prompt" || url.pathname.endsWith("/api/forge/prompt")) {
-      const { prompt, imageBase64, mimeType } = body;
+      const prompt = body.prompt || body.message || rawText;
+      const { imageBase64, mimeType } = body;
+
       if (!prompt && !imageBase64) {
         return new Response(JSON.stringify({ error: "Prompt or Image is required" }), { status: 400, headers: jsonHeaders });
       }
@@ -121,7 +138,7 @@ export const onRequest = async (context) => {
     // RUTA 3: CHAT ASISTENTE (/api/forge/chat)
     // ==========================================
     if (url.pathname === "/api/forge/chat" || url.pathname.endsWith("/api/forge/chat")) {
-      const { message } = body;
+      const message = body.message || body.prompt || rawText;
       if (!ai) {
         return new Response(JSON.stringify({ reply: "Motor local listo. Escribe tu comando." }), { status: 200, headers: jsonHeaders });
       }
